@@ -5,7 +5,7 @@ from keras.callbacks import TensorBoard, EarlyStopping
 from keras.models import load_model
 
 class CAE:
-	def __init__(self, inputShapes, nbNeuronsLayers=[32, 32, 32], nbConvFilters=(3,3), poolScale=(2, 2)):
+	def __init__(self, inputShapes, nbNeuronsLayers=[128, 64, 32], nbConvFilters=(3,3), poolScale=(2, 2)):
 		# Model parameters
 		self.inputShapes = inputShapes
 		self.nbNeuronsLayers = nbNeuronsLayers
@@ -43,16 +43,16 @@ class CAE:
 		print(self.encoder.summary())
 
 		#compile 
-		self.autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+		self.autoencoder.compile(optimizer='adam', loss='mean_squared_error')
 
-	def train(self, x_train, x_test, epochs=50, batch_size=256, shuffle=True):
+	def train(self, x_train, x_test, epochs=50, batch_size=128, shuffle=True):
 		assert self.autoencoder is not None, "CAE not initiate, please call createModel() first"
 		self.autoencoder.fit(x_train, x_train,
                 epochs=epochs,
                 batch_size=batch_size,
                 shuffle=shuffle,
                 validation_data=(x_test, x_test),
-                callbacks=[TensorBoard(log_dir='/tmp/autoencoder'), EarlyStopping(monitor='val_loss', min_delta=0, patience=10)])
+                callbacks=[TensorBoard(log_dir='/tmp/autoencoder'), EarlyStopping(monitor='val_loss', min_delta=0, patience=5)])
 	
 	def predict(self, x):
 		assert self.autoencoder is not None, "CAE not initiate, please call createModel() first"
@@ -64,10 +64,11 @@ class CAE:
 
 	def save(self, filename):
 		assert self.autoencoder is not None, "CAE not initiate, please call createModel() first"
-		return self.autoencoder.save(filename)
+		return self.autoencoder.save(filename), self.encoder.save("encoder_"+filename)
 
 	def load(self, filename):
 		self.autoencoder = load_model(filename)
+		self.encoder = load_model("encoder_"+filename)
 
 	
 

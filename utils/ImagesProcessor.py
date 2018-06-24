@@ -4,6 +4,9 @@ import imageio # Read/Write Images
 import skimage.transform as skitrans
 import skimage.io as skio #Features extraction
 import skimage.color as skicol #Features extraction
+import cv2
+from scipy.stats.mstats import gmean
+import models.CAE as cae
 
 class ImagesProcessor():
 
@@ -18,7 +21,7 @@ class ImagesProcessor():
 
     # Read the filename image and return it as a numpy array
     def readImage(self, filename):
-        return imageio.imread(filename)
+        return imageio.imread(filename).astype(np.uint8)
 
     # Write the dir image from a numpy array
     def writeImage(self, img, dir):
@@ -26,9 +29,12 @@ class ImagesProcessor():
 
     ##########################################################################################
     ################################## Images Manipulations ##################################
-    # Resize Image to the correspondant shape, Not Tested yet
+    ##########################################################################################
+
+    # Resize Image to the correspondant shape
     def resizeImage(self, img, shape):
-        return skitrans.resize(img, shape)
+        #return skitrans.resize(img, shape)
+        return cv2.resize(img , (shape[0], shape[1]))
 
     # Transform a 4 dimensional array into one single vector to feed the models
     def flattenImages(self, imgs):
@@ -37,7 +43,7 @@ class ImagesProcessor():
         flatten = imgs.reshape((n, dim))
         return flatten
 
-    # Normalize the values of an array between min and max with 
+    # Normalize the values of an array between min and max 
     def normalizeArray(self, array, min, max):
         minValue = np.min(array)
         maxValue = np.max(array)
@@ -85,20 +91,15 @@ class ImagesProcessor():
         histograms = histograms.astype('float')
         return histograms
 
-    def extractRGBHistograms(self,images):
-        assert len(images) > 0, 'No images to compute'
-
-        histograms = []
-        for image in images:
-            colors = []
-            for color in range(image.shape[2]):
-                band = image[:, :, color].reshape(-1)
-                values, bins = np.histogram(band, range=(0, 255))
-                colors += list(values)
-            histograms.append(colors)
-        histograms = np.array(histograms)
-        histograms = histograms.astype('float')
-        return histograms
+    def extractRGBHistogram(self,image):
+        colors = []
+        for color in range(image.shape[2]):
+            band = image[:, :, color].reshape(-1)
+            values, bins = np.histogram(band, range=(0, 255))
+            colors += list(values)
+        histogram = np.array(colors)
+        histogram = histogram.astype('float')
+        return histogram
 
     def extractHueHistograms(self,images):
         assert len(images) > 0, 'No images to compute'
@@ -112,7 +113,48 @@ class ImagesProcessor():
         histograms = histograms.astype('float')
         return histograms
 
-    
+    # From https://stackoverflow.com/questions/47745541/shadow-removal-in-python-opencv/48875676
+    def extractChromaticity(self, image):
+        img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        h, w = img.shape[:2]
+
+        img = cv2.GaussianBlur(img, (5,5), 0)
+
+        # Separate Channels
+        r, g, b = cv2.split(img) 
+
+        im_sum = np.sum(img, axis=2)
+        im_mean = gmean(img, axis=2)
+
+        # Create "normalized", mean, and rg chromaticity vectors
+        #  We use mean (works better than norm). rg Chromaticity is
+        #  for visualization
+        n_r = np.ma.divide( 1.*r, g )
+        n_b = np.ma.divide( 1.*b, g )
+
+        mean_r = np.ma.divide(1.*r, im_mean)
+        mean_g = np.ma.divide(1.*g, im_mean)
+        mean_b = np.ma.divide(1.*b, im_mean)
+
+        rg_chrom_r = np.ma.divide(1.*r, im_sum)
+        rg_chrom_g = np.ma.divide(1.*g, im_sum)
+        rg_chrom_b = np.ma.divide(1.*b, im_sum)
+
+        # Visualize rg Chromaticity --> DEBUGGING
+        rg_chrom = np.zeros_like(img)
+
+        rg_chrom[:,:,0] = np.clip(np.uint8(rg_chrom_r*255), 0, 255)
+        rg_chrom[:,:,1] = np.clip(np.uint8(rg_chrom_g*255), 0, 255)
+        rg_chrom[:,:,2] = np.clip(np.uint8(rg_chrom_b*255), 0, 255)
+
+        return rg_chrom
+
+    def extractCAEfeatures(self, image):
+        autoencoder = cae.CAE(image.shape[1:],nbNeuronsLayers=[16, 8, 8], nbConvFilters=(3,3), poolScale=(2, 2))
+        autoencoder.createModel()
+        autoencoder.train(image, image, epochs=50)
+        return autoencoder.extractFeatures(image)
 
 #if __name__ == "__main__":
     #IP = ImagesProcessor()
