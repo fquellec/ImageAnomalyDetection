@@ -6,7 +6,8 @@ import skimage.io as skio #Features extraction
 import skimage.color as skicol #Features extraction
 import cv2
 from scipy.stats.mstats import gmean
-import models.CAE as cae
+#import models.CAE as cae
+from skimage.feature import greycomatrix, greycoprops
 
 class ImagesProcessor():
 
@@ -21,7 +22,7 @@ class ImagesProcessor():
 
     # Read the filename image and return it as a numpy array
     def readImage(self, filename):
-        return imageio.imread(filename).astype(np.uint8)
+        return np.uint8(imageio.imread(filename))
 
     # Write the dir image from a numpy array
     def writeImage(self, img, dir):
@@ -79,17 +80,10 @@ class ImagesProcessor():
     ################################## Features Extraction ###################################
     ##########################################################################################
 
-    def extractGrayHistograms(self,images):
-        assert len(images) > 0, 'No images to compute'
-
-        histograms = []
-        for image in images:
-            grayImage = skicol.rgb2grey(image)
-            histogram, bins = np.histogram(grayImage, range=(0, 1))
-            histograms.append(histogram)
-        histograms = np.array(histograms)
-        histograms = histograms.astype('float')
-        return histograms
+    def extractGrayHistogram(self,image):
+        grayImage = skicol.rgb2grey(image)
+        histogram, bins = np.histogram(grayImage, range=(0, 1))
+        return np.array(histogram).astype('float')
 
     def extractRGBHistogram(self,image):
         colors = []
@@ -97,21 +91,14 @@ class ImagesProcessor():
             band = image[:, :, color].reshape(-1)
             values, bins = np.histogram(band, range=(0, 255))
             colors += list(values)
-        histogram = np.array(colors)
-        histogram = histogram.astype('float')
+        histogram = np.array(colors).astype('float')
         return histogram
 
-    def extractHueHistograms(self,images):
-        assert len(images) > 0, 'No images to compute'
-
-        histograms = []
-        for image in images:
-            hue = skicol.rgb2hsv(image)[:, :, 0].reshape(-1)
-            histogram, bins = np.histogram(hue, range=(0, 1))
-            histograms.append(histogram)
-        histograms = np.array(histograms)
-        histograms = histograms.astype('float')
-        return histograms
+    def extractHUEHistogram(self,image):
+        hue = skicol.rgb2hsv(image)[:, :, 0].reshape(-1)
+        histogram, bins = np.histogram(hue, range=(0, 1))
+        histogram = np.array(histogram).astype('float')
+        return histogram
 
     # From https://stackoverflow.com/questions/47745541/shadow-removal-in-python-opencv/48875676
     def extractChromaticity(self, image):
@@ -150,11 +137,21 @@ class ImagesProcessor():
 
         return rg_chrom
 
-    def extractCAEfeatures(self, image):
-        autoencoder = cae.CAE(image.shape[1:],nbNeuronsLayers=[16, 8, 8], nbConvFilters=(3,3), poolScale=(2, 2))
-        autoencoder.createModel()
-        autoencoder.train(image, image, epochs=50)
-        return autoencoder.extractFeatures(image)
+   # def extractCAEfeatures(self, image):
+   #     autoencoder = cae.CAE(image.shape[1:],nbNeuronsLayers=[16, 8, 8], nbConvFilters=(3,3), poolScale=(2, 2))
+   #     autoencoder.createModel()
+   #     autoencoder.train(image, image, epochs=50)
+   #     return autoencoder.extractFeatures(image)
+
+    def extractTexturefeatures(self, image):
+        grayImage = skicol.rgb2grey(image).astype('uint8')
+        glcm = greycomatrix(grayImage, [5], [0], 256, symmetric=True, normed=True)
+        return np.array([greycoprops(glcm, 'dissimilarity')[0, 0], 
+                        greycoprops(glcm, 'homogeneity')[0, 0], 
+                        greycoprops(glcm, 'ASM')[0, 0] , 
+                        greycoprops(glcm, 'contrast')[0, 0] ,
+                        greycoprops(glcm, 'energy')[0, 0] ,
+                        greycoprops(glcm, 'correlation')[0, 0] ]).astype('float')
 
 #if __name__ == "__main__":
     #IP = ImagesProcessor()
